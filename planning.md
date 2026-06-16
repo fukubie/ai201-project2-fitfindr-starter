@@ -107,9 +107,9 @@ For each tool, describe the specific failure mode you're handling and what the a
 
 | Tool | Failure mode | Agent response |
 |------|-------------|----------------|
-| search_listings | No results match the query | |
-| suggest_outfit | Wardrobe is empty | |
-| create_fit_card | Outfit input is missing or incomplete | |
+| **search_listings** | No items in the catalog match the user's keywords, size, or price constraints. | The agent immediately halts the entire planning loop. It writes a specific message to `session["error"]`: *"No listings found matching your constraints. Try loosening your price limit or changing your search terms!"* It exits the function early and does not call any other tools. |
+| **suggest_outfit** | The user has no clothes in their digital closet (`wardrobe["items"]` is completely empty). | The agent does **not** fail or stop. Instead, it adjusts its strategy and directs the Groq LLM to generate general fashion styling guidelines for the new item (e.g., advising what universal colors, shapes, or aesthetics pair best with it) instead of matching it with specific closet pieces. |
+| **create_fit_card** | The text input from `suggest_outfit` is missing, completely empty, or filled only with blank spaces. | The agent catches this empty data string before making an unnecessary API call. It skips the LLM generation entirely and returns a safe, helpful fallback message: *"Unable to generate your Fit Card because outfit data was missing. Please double-check your search and try again!"* |
 
 ---
 
@@ -171,9 +171,16 @@ graph TD
      before trusting it" is a plan. -->
 
 **Milestone 3 — Individual tool implementations:**
+- **AI Tool:** Claude 3.5 Sonnet (with Plan Mode enabled)
+- **Inputs to Provide:** I will toggle Claude into Plan Mode and provide the completed `## Tools` section from this `planning.md` file along with the `utils/data_loader.py` file structures. 
+- **Expected Production:** I expect Claude to first output a architectural plan outlining its helper function strategies, regex extraction bounds, and Groq API mock calls. Once I approve the plan, it will generate the complete, type-hinted code for `search_listings`, `suggest_outfit`, and `create_fit_card` inside `tools.py`.
+- **Verification Strategy:** I will manually verify that the planned fallback states (handling an empty wardrobe) use custom prompt injections for general styling text rather than failing out. After execution, I will run standalone `pytest` unit tests targeting the search scoring loop and the error parameters to confirm it catches edge cases cleanly.
 
 **Milestone 4 — Planning loop and state management:**
-
+- **AI Tool:** Claude 3.5 Sonnet (with Plan Mode enabled)
+- **Inputs to Provide:** I will initiate a new Plan Mode session and paste the complete `## Planning Loop` logic requirements, the easy English `## State Management` source-of-truth rules, and our verified `## Architecture` Mermaid workflow diagram. I will also include the current skeleton code of `agent.py`.
+- **Expected Production:** An explicit step-by-step pseudo-code design tracing how a query mutates the session state dictionary, followed by the finalized implementation of the `run_agent()` pipeline block.
+- **Verification Strategy:** I will review Claude's initial structural breakdown to confirm it checks the array length of `session["search_results"]` before calling downstream tools. Finally, I will run the built-in CLI checks (`python agent.py`) to visually confirm that standard queries generate successful artifacts while invalid budget queries hit the clean early termination error path.
 ---
 
 ## A Complete Interaction (Step by Step)
