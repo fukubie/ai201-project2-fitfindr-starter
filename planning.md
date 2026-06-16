@@ -135,7 +135,7 @@ graph TD
     Cond1 -- Yes: Error Path --> Err[Set session error message]
     Err --> Terminate([Stop & Return Session Early])
     
-    Cond1 -- No: Happy Path --> Sel[Set session selected_item = results[0]]
+    Cond1 -- No: Happy Path --> Sel["Set session selected_item = results[0]"]
     
     %% Tool 2 Execution
     Sel --> Tool2[suggest_outfit]
@@ -153,6 +153,8 @@ graph TD
     style Err fill:#f9cfcf,stroke:#ff5555,stroke-width:2px
     style Terminate fill:#f9cfcf,stroke:#ff5555,stroke-width:1px
     style Done fill:#d4edda,stroke:#28a745,stroke-width:2px
+```
+
 ---
 
 ## AI Tool Plan
