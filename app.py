@@ -43,8 +43,37 @@ def handle_query(user_query: str, wardrobe_choice: str) -> tuple[str, str, str]:
            string and return it along with session["outfit_suggestion"] and
            session["fit_card"].
     """
-    # TODO: implement this function
-    return "Agent not yet implemented.", "", ""
+    # 1. Guard against empty query structures
+    if not user_query or not user_query.strip():
+        return "Please enter a clothing item query to begin searching!", "", ""
+
+    # 2. Select closet configuration based on dropdown state values
+    if wardrobe_choice == "Example wardrobe":
+        wardrobe = get_example_wardrobe()
+    else:
+        wardrobe = get_empty_wardrobe()
+
+    # 3. Process instructions through pipeline orchestrator
+    session = run_agent(user_query, wardrobe)
+
+    # 4. Fork display layouts cleanly if runtime errors were caught
+    if session.get("error") is not None:
+        return session["error"], "", ""
+
+    # 5. Format valid structural components into readable UI displays
+    item = session["selected_item"]
+    brand_display = f" [{item.get('brand')}]" if item.get("brand") else ""
+    
+    listing_text = (
+        f"🏷️ Title: {item.get('title')}{brand_display}\n"
+        f"💰 Price: ${item.get('price')} | 📦 Sourced From: {item.get('platform').upper()}\n"
+        f"📏 Size: {item.get('size')} | ✨ Condition: {item.get('condition')}\n"
+        f"🎨 Colors: {', '.join(item.get('colors', []))}\n"
+        f"🧵 Tags: {', '.join(item.get('style_tags', []))}\n\n"
+        f"📝 Description:\n{item.get('description')}"
+    )
+
+    return listing_text, session["outfit_suggestion"], session["fit_card"]
 
 
 # ── interface ─────────────────────────────────────────────────────────────────

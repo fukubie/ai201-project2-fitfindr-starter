@@ -13,6 +13,7 @@ Tools:
 """
 
 import os
+import re
 
 from dotenv import load_dotenv
 from groq import Groq
@@ -69,8 +70,37 @@ def search_listings(
 
     Before writing code, fill in the Tool 1 section of planning.md.
     """
-    # Replace this with your implementation
-    return []
+    try:
+        listings = load_listings()
+    except Exception:
+        return []
+
+    if max_price is not None:
+        listings = [l for l in listings if l["price"] <= max_price]
+
+    if size is not None:
+        size_lower = size.lower()
+        listings = [l for l in listings if size_lower in l["size"].lower()]
+
+    tokens = set(re.sub(r"[^\w\s]", "", description.lower()).split())
+    if not tokens:
+        return []
+
+    scored = []
+    for listing in listings:
+        blob = " ".join([
+            listing["title"],
+            listing["description"],
+            listing["category"],
+            " ".join(listing["style_tags"]),
+            listing["brand"] or "",
+        ]).lower()
+        score = sum(1 for t in tokens if t in blob)
+        if score > 0:
+            scored.append((score, listing))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [listing for _, listing in scored]
 
 
 # ── Tool 2: suggest_outfit ────────────────────────────────────────────────────
@@ -100,8 +130,57 @@ def suggest_outfit(new_item: dict, wardrobe: dict) -> str:
 
     Before writing code, fill in the Tool 2 section of planning.md.
     """
-    # Replace this with your implementation
-    return ""
+    items = wardrobe.get("items", [])
+
+    system_prompt = (
+        "You are a concise personal stylist who gives actionable, specific fashion advice. "
+        "Respond in 2–4 sentences."
+    )
+
+    item_line = (
+        f"- Name: {new_item.get('title', 'Unknown item')}\n"
+        f"- Category: {new_item.get('category', '')}\n"
+        f"- Colors: {', '.join(new_item.get('colors', []))}\n"
+        f"- Style: {', '.join(new_item.get('style_tags', []))}"
+    )
+
+    if not items:
+        user_prompt = (
+            f"I just found this thrifted item:\n{item_line}\n\n"
+            "I don't have a wardrobe on file yet. Give me 1–2 versatile outfit ideas — "
+            "suggest the types of silhouettes, textures, and complementary colors that "
+            "would pair beautifully with this piece."
+        )
+    else:
+        wardrobe_lines = []
+        for piece in items:
+            line = (
+                f"- {piece.get('name', '')} ({piece.get('category', '')}) "
+                f"| Colors: {', '.join(piece.get('colors', []))} "
+                f"| Style: {', '.join(piece.get('style_tags', []))}"
+            )
+            if piece.get("notes"):
+                line += f" | Notes: {piece['notes']}"
+            wardrobe_lines.append(line)
+
+        user_prompt = (
+            f"I just found this thrifted item:\n{item_line}\n\n"
+            f"Here is my current wardrobe:\n{chr(10).join(wardrobe_lines)}\n\n"
+            "Suggest 1–2 specific outfit combinations using the new item and pieces from "
+            "my wardrobe. Name the exact wardrobe pieces you're pairing it with."
+        )
+
+    client = _get_groq_client()
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=0.7,
+        max_tokens=400,
+    )
+    return response.choices[0].message.content.strip()
 
 
 # ── Tool 3: create_fit_card ───────────────────────────────────────────────────
@@ -133,5 +212,44 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
 
     Before writing code, fill in the Tool 3 section of planning.md.
     """
-    # Replace this with your implementation
-    return ""
+    if not outfit.strip():
+        return (
+            "Unable to generate your Fit Card because outfit data was missing. "
+            "Please double-check your search and try again!"
+        )
+
+    title = new_item.get("title", "this thrifted piece")
+    price = new_item.get("price", "")
+    platform = new_item.get("platform", "a thrift platform")
+
+    system_prompt = (
+        "You are a fashion-forward Gen-Z thrifter writing casual, authentic OOTD captions "
+        "for Instagram and TikTok. Write in first person. Sound real, not like an ad. "
+        "Use specific, vivid language about the vibe — not generic phrases."
+    )
+
+    user_prompt = (
+        f"Write a 2–4 sentence Instagram/TikTok caption for this outfit:\n\n"
+        f"Outfit: {outfit}\n"
+        f"Item: {title}\n"
+        f"Price: ${price}\n"
+        f"Found on: {platform}\n\n"
+        f"Rules:\n"
+        f'- Mention "{title}" naturally once.\n'
+        f"- Mention the price (${price}) naturally once.\n"
+        f"- Mention the platform ({platform}) naturally once.\n"
+        f"- Do NOT use hashtags.\n"
+        f"- Sound like a real person posting their OOTD, not a product description."
+    )
+
+    client = _get_groq_client()
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=0.85,
+        max_tokens=200,
+    )
+    return response.choices[0].message.content.strip()

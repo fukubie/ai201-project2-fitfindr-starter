@@ -18,7 +18,9 @@ Usage (once implemented):
     print(result["error"])   # None on success
 """
 
-from tools import search_listings, suggest_outfit, create_fit_card
+import json
+
+from tools import search_listings, suggest_outfit, create_fit_card, _get_groq_client
 
 
 # ── session state ─────────────────────────────────────────────────────────────
@@ -92,9 +94,57 @@ def run_agent(query: str, wardrobe: dict) -> dict:
     Before writing code, complete the Planning Loop and State Management sections
     of planning.md — your implementation should match what you described there.
     """
-    # TODO: implement the planning loop
     session = _new_session(query, wardrobe)
-    session["error"] = "Planning loop not yet implemented."
+
+    # Parse query with LLM
+    system_prompt = (
+        "You are a query parser for a clothing search app. Extract exactly three fields "
+        "from the user's search query and return ONLY a valid JSON object — no markdown, "
+        "no explanation, no code block wrapper.\n\n"
+        "Required JSON shape:\n"
+        '{"description": "<short keyword phrase>", "size": "<size string or null>", "max_price": <float or null>}'
+    )
+    try:
+        client = _get_groq_client()
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": query},
+            ],
+            temperature=0,
+            max_tokens=100,
+        )
+        parsed = json.loads(response.choices[0].message.content.strip())
+    except Exception:
+        parsed = {"description": query, "size": None, "max_price": None}
+
+    session["parsed"] = parsed
+
+    # Search
+    session["search_results"] = search_listings(
+        description=session["parsed"]["description"],
+        size=session["parsed"]["size"],
+        max_price=session["parsed"]["max_price"],
+    )
+
+    # Branch guard
+    if not session["search_results"]:
+        session["error"] = (
+            "No listings found matching your constraints. "
+            "Try loosening your price limit or changing your search terms!"
+        )
+        return session
+
+    session["selected_item"] = session["search_results"][0]
+    session["outfit_suggestion"] = suggest_outfit(
+        new_item=session["selected_item"],
+        wardrobe=session["wardrobe"],
+    )
+    session["fit_card"] = create_fit_card(
+        outfit=session["outfit_suggestion"],
+        new_item=session["selected_item"],
+    )
     return session
 
 
